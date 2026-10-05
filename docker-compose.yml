@@ -1,0 +1,84 @@
+# "Production" for this exercise: LocalStack plays AWS (SQS, S3, IAM, KMS,
+# Secrets Manager, CloudWatch Logs), plus Postgres, the API, the worker, and a
+# traffic generator so the queue always has work in it.
+name: scan-infra
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://scan:scan@db:5432/scan
+  SCAN_QUEUE_URL: http://localstack:4566/000000000000/scans-production
+  SCAN_SIMULATED_SECONDS: "3"
+  EXPORTS_BUCKET: scan-member-exports-production
+  EXPORTS_BASE_URL: http://localhost:4566/scan-member-exports-production
+  S3_ADDRESSING_STYLE: path
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  DD_ENV: prod
+  DEBUG: "1"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: scan
+      POSTGRES_PASSWORD: scan
+      POSTGRES_DB: scan
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scan"]
+      interval: 2s
+      retries: 30
+
+  localstack:
+    image: localstack/localstack:4.0.3
+    environment:
+      SERVICES: iam,kms,logs,s3,secretsmanager,sqs,ssm,sts
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf localhost:4566/_localstack/health | grep -qE '\"sqs\": \"(available|running)\"'"]
+      interval: 2s
+      retries: 60
+
+  web:
+    build: ./app
+    command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
+      interval: 2s
+      retries: 30
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+  worker:
+    build: ./app
+    command: python manage.py run_worker
+    environment: *app-env
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+
+  # About one member activating every 2 seconds. Stop it with `docker compose stop traffic`.
+  traffic:
+    build: ./app
+    command:
+      - python
+      - -c
+      - |
+        import random, time, urllib.request
+        while True:
+            try:
+                urllib.request.urlopen(urllib.request.Request(f"http://web:8000/members/{random.randint(1, 5000)}/scans", method="POST"), timeout=5)
+            except Exception as e:
+                print("traffic:", e, flush=True)
+            time.sleep(2)
+    depends_on:
+      web:
+        condition: service_healthy

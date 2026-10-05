@@ -1,0 +1,4 @@
+#!/bin/sh
+# The AWS CLI, pointed at LocalStack (runs awslocal inside the LocalStack container).
+#   ./aws sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/scans-production --attribute-names All
+exec docker compose -f "$(dirname "$0")/docker-compose.yml" exec -T localstack awslocal "$@"

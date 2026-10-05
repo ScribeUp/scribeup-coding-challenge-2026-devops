@@ -1,0 +1,7 @@
+# Keep Unix line endings on anything a shell runs, and on the PR patch so
+# `git am` applies cleanly, even when cloned with Git for Windows and used from WSL.
+aws text eol=lf
+tf text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+*.patch text eol=lf

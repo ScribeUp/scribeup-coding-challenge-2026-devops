@@ -1,0 +1,4 @@
+-r requirements.txt
+moto[sqs,s3]>=5,<6
+# 47+ wheels crash with "Illegal instruction" on some Docker Desktop VMs
+cryptography>=44,<47
