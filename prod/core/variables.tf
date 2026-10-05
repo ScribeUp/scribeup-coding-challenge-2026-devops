@@ -9,8 +9,11 @@ variable "environment" {
 }
 
 locals {
+  # Datadog and the app call this environment "prod" (DD_ENV=prod), so name resources to match.
+  env = var.environment == "production" ? "prod" : var.environment
+
   tags = {
     service = "scan"
-    env     = var.environment
+    env     = local.env
   }
 }

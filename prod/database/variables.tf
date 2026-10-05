@@ -20,8 +20,3 @@ variable "app_security_group_id" {
   type        = string
   description = "Security group attached to the web and worker instances"
 }
-
-variable "db_password" {
-  type      = string
-  sensitive = true
-}
